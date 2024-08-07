@@ -218,7 +218,59 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        const API_URL = 'https://api.github.com/repos/YOUR_USERNAME/YOUR_REPOSITORY/contents/'; // Replace with your repository URL
+        const TOKEN = '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';
+
+        // Helper function for GitHub API requests
+        async function githubRequest(endpoint, method = 'GET', body = null) {
+            const headers = new Headers();
+            headers.append('Authorization', `token ${TOKEN}`);
+            headers.append('Accept', 'application/vnd.github.v3+json');
+            headers.append('Content-Type', 'application/json');
+
+            const options = {
+                method,
+                headers,
+            };
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            const response = await fetch(`${API_URL}${endpoint}`, options);
+            if (!response.ok) {
+                throw new Error(`GitHub API error: ${response.statusText}`);
+            }
+            return response.json();
+        }
+
+        // Load data from GitHub
+        async function loadData() {
+            try {
+                const data = await githubRequest('data.json');
+                return JSON.parse(atob(data.content));
+            } catch (error) {
+                console.error('Error loading data:', error);
+                return [];
+            }
+        }
+
+        // Save data to GitHub
+        async function saveData(data) {
+            try {
+                const file = await githubRequest('data.json');
+                const sha = file.sha;
+                const content = btoa(JSON.stringify(data));
+                await githubRequest('data.json', 'PUT', {
+                    message: 'Update data',
+                    content,
+                    sha
+                });
+            } catch (error) {
+                console.error('Error saving data:', error);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
             const adminLoginForm = document.getElementById('admin-login-form');
             const adminDashboard = document.getElementById('admin-dashboard');
             const createTournamentForm = document.getElementById('create-tournament-form');
@@ -226,13 +278,10 @@
             const upcomingTournamentList = document.getElementById('upcoming-tournament-list');
             const walletBalance = document.getElementById('wallet-balance');
             const walletSection = document.getElementById('wallet-section');
-            const userForm = document.createElement('form');
-            userForm.className = 'form';
-
-            // Retrieve data from local storage
-            let tournaments = JSON.parse(localStorage.getItem('tournaments')) || [];
-            let wallet = JSON.parse(localStorage.getItem('wallet')) || 0;
-            let joinedUsers = JSON.parse(localStorage.getItem('joinedUsers')) || {};
+            let data = await loadData();
+            let tournaments = data.tournaments || [];
+            let wallet = data.wallet || 0;
+            let joinedUsers = data.joinedUsers || {};
 
             // Admin Login
             adminLoginForm.addEventListener('submit', (event) => {
@@ -240,7 +289,6 @@
                 const adminId = document.getElementById('admin-id').value;
                 const adminPassword = document.getElementById('admin-password').value;
 
-                // Check credentials
                 if (adminId === 'BROSENA@DIP18' && adminPassword === 'DIP18@BROSENA#@!') {
                     adminLoginForm.style.display = 'none';
                     adminDashboard.style.display = 'block';
@@ -254,7 +302,7 @@
                 createTournamentForm.style.display = 'block';
             });
 
-            tournamentForm.addEventListener('submit', (event) => {
+            tournamentForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
                 const newTournament = {
                     id: tournaments.length + 1,
@@ -269,17 +317,10 @@
                     remainingSlots: parseInt(document.getElementById('player-slots').value, 10),
                 };
                 tournaments.push(newTournament);
-                saveData();
+                await saveData({ tournaments, wallet, joinedUsers });
                 createTournamentForm.style.display = 'none';
                 updateTournamentList();
             });
-
-            // Save data to local storage
-            function saveData() {
-                localStorage.setItem('tournaments', JSON.stringify(tournaments));
-                localStorage.setItem('wallet', JSON.stringify(wallet));
-                localStorage.setItem('joinedUsers', JSON.stringify(joinedUsers));
-            }
 
             // Update Tournament List
             function updateTournamentList() {
@@ -296,9 +337,9 @@
                     const deleteButton = document.createElement('button');
                     deleteButton.textContent = 'Delete';
                     deleteButton.classList.add('button', 'delete-button');
-                    deleteButton.addEventListener('click', () => {
+                    deleteButton.addEventListener('click', async () => {
                         tournaments = tournaments.filter(t => t.id !== tournament.id);
-                        saveData();
+                        await saveData({ tournaments, wallet, joinedUsers });
                         updateTournamentList();
                     });
 
@@ -310,7 +351,7 @@
                         const roomPassword = prompt("Enter Room Password:");
                         tournament.roomId = roomId;
                         tournament.roomPassword = roomPassword;
-                        saveData();
+                        saveData({ tournaments, wallet, joinedUsers });
                         alert(`Updated Room ID: ${roomId} and Password: ${roomPassword}`);
                         updateUpcomingTournamentList();
                     });
@@ -372,7 +413,7 @@
                                     joinedUsers[tournament.id] = [];
                                 }
                                 joinedUsers[tournament.id].push({ username, whatsapp });
-                                saveData();
+                                saveData({ tournaments, wallet, joinedUsers });
                                 alert(`You have joined the tournament: ${tournament.name}`);
                                 updateUpcomingTournamentList();
                             } else {
@@ -413,9 +454,9 @@
 
             // Simulate wallet recharge
             walletSection.querySelector('a').addEventListener('click', () => {
-                setTimeout(() => {
+                setTimeout(async () => {
                     wallet += 10;
-                    saveData();
+                    await saveData({ tournaments, wallet, joinedUsers });
                     updateWalletBalance();
                 }, 5000); // Simulate a delay for payment processing
             });
@@ -427,5 +468,3 @@
     </script>
 </body>
 </html>
-
-
